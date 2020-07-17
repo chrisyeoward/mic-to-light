@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Mic to light</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <!--    <link type="text/css" rel="stylesheet" href="main.css">-->
+    <style>
+        body {
+            background-color: #cce0ff;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+<canvas class="visualizer" width="640" height="100"></canvas>
+<script type="module">
+    import getRgbFromSpectrum from './spectrumToRgb.js';
+
+    let WIDTH, HEIGHT;
+    const context = new AudioContext();
+    let canvas = document.querySelector('.visualizer');
+
+    let canvasCtx = canvas.getContext("2d");
+    let drawVisual;
+    let analyser;
+
+    const lowerSpeechLimits = 350.0;
+    const fftSize = 1024;
+    const FT = 44100.0;
+
+    const lowerBin = Math.floor((lowerSpeechLimits / (FT/2)) * fftSize);
+    console.log("lower bin:", lowerBin);
+
+    const wavelengthBinCount = 78;
+
+    navigator.mediaDevices.getUserMedia({audio: true, video: false})
+        .then((stream) => {
+            const source = context.createMediaStreamSource(stream);
+            analyser = context.createAnalyser();
+
+            source.connect(analyser);
+
+            visualise();
+        });
+
+    function visualise() {
+        WIDTH = canvas.width;
+        HEIGHT = canvas.height;
+
+        analyser.fftSize = fftSize;
+        analyser.sampleRate = FT;
+
+        let bufferLength = analyser.frequencyBinCount;
+        let bins = new Uint8Array(bufferLength);
+
+        let freqBins = new Uint8Array(wavelengthBinCount);
+
+        canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+
+        function draw() {
+            drawVisual = requestAnimationFrame(draw);
+
+            analyser.getByteFrequencyData(bins);
+
+            canvasCtx.fillStyle = 'rgb(0, 0, 0)';
+            canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+            let barWidth = (WIDTH / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for(let bin = lowerBin; bin < lowerBin + wavelengthBinCount; bin++) {
+                freqBins[bin] = bins[bin] / 256.0;
+            }
+
+            const {r,g,b} = getRgbFromSpectrum(bins);
+            // console.log("RGB:", {r,g,b});
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = (bins[i] / 256.0) * HEIGHT;
+
+                // canvasCtx.fillStyle = 'rgb(' + Math.floor(barHeight + 100) + ',50,50)';
+                canvasCtx.fillStyle = 'rgb(' + r*255 + ',' + g*255 + ',' + b * 255 + ')';
+                canvasCtx.fillRect(x, HEIGHT - barHeight, barWidth, barHeight);
+
+                x += barWidth + 1;
+            }
+        };
+
+        draw();
+    }
+
+</script>
+</body>
+</html>
